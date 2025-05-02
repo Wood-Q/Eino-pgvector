@@ -26,6 +26,7 @@ go get github.com/Wood-Q/Eino-pgvector
 ## 快速开始
 
 ### example/main.go是使用的示例文件
+### PostgreSQL的索引仅支持2000维度大小，所以推荐使用腾讯的混元模型生成，火山引擎的维度会超，希望注意一下
 
 ### 1. 配置数据库
 
