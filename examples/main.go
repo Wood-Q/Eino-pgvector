@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"log"
 
+	pgvector "github.com/Wood-Q/Eino-pgvector"
 	"github.com/cloudwego/eino-ext/components/embedding/tencentcloud"
-	"github.com/cloudwego/eino/components/indexer/pgvector"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
 	_ "github.com/lib/pq"

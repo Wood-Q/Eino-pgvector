@@ -1,4 +1,4 @@
-module github.com/cloudwego/eino/components/indexer/pgvector
+module github.com/Wood-Q/Eino-pgvector
 
 go 1.24.2
 
