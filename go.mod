@@ -4,8 +4,8 @@ go 1.24.2
 
 require (
 	github.com/cloudwego/eino v0.3.27
-	github.com/cloudwego/eino-ext/components/document/transformer/splitter/markdown v0.0.0-20250429121045-a2545a66f5cf
 	github.com/cloudwego/eino-ext/components/embedding/tencentcloud v0.0.0-20250429121045-a2545a66f5cf
+	github.com/google/uuid v1.6.0
 	github.com/lib/pq v1.10.9
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/stretchr/testify v1.9.0
