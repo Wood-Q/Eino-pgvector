@@ -24,7 +24,8 @@ const (
 )
 
 const (
-	DefaultFieldID       = "id"
+	DefaultFieldAutoID   = "id"
+	DefaultFieldID       = "document_id"
 	DefaultFieldVector   = "embedding"
 	DefaultFieldContent  = "content"
 	DefaultFieldMetadata = "metadata"

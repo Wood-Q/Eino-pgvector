@@ -210,20 +210,22 @@ func (i *Indexer) ensureTable(ctx context.Context) error {
 		return fmt.Errorf("[PGVectorIndexer] failed to create vector extension: %w", err)
 	}
 
-	// Create table
+	// Create table with auto-increment primary key and document_id field
 	createTableSQL := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %s (
-		%s TEXT PRIMARY KEY,
+		%s SERIAL PRIMARY KEY,
+		%s TEXT NOT NULL,
 		%s TEXT NOT NULL,
 		%s JSONB,
 		%s %s(%d) NOT NULL
 	);
 	`,
 		i.config.TableName,
-		DefaultFieldID,
-		DefaultFieldContent,
-		DefaultFieldMetadata,
-		DefaultFieldVector,
+		DefaultFieldAutoID,
+		DefaultFieldID,       // document_id field
+		DefaultFieldContent,  // content field
+		DefaultFieldMetadata, // metadata field
+		DefaultFieldVector,   // vector/embedding field
 		i.config.VectorType,
 		i.config.Dimension,
 	)
@@ -417,16 +419,15 @@ func (i *Indexer) batchInsert(ctx context.Context, docs []*schema.Document, vect
 		valueArgs = append(valueArgs, doc.ID, doc.Content, string(metadata), vectorStr)
 	}
 
-	// Build complete SQL
+	// Build complete SQL - insert into document_id, content, metadata, and embedding fields
 	sql := fmt.Sprintf(
-		"INSERT INTO %s (%s, %s, %s, %s) VALUES %s ON CONFLICT (%s) DO UPDATE SET %s = EXCLUDED.%s, %s = EXCLUDED.%s, %s = EXCLUDED.%s",
+		"INSERT INTO %s (%s, %s, %s, %s) VALUES %s",
 		i.config.TableName,
-		DefaultFieldID, DefaultFieldContent, DefaultFieldMetadata, DefaultFieldVector,
+		DefaultFieldID,       // document_id field
+		DefaultFieldContent,  // content field
+		DefaultFieldMetadata, // metadata field
+		DefaultFieldVector,   // vector/embedding field
 		strings.Join(valueStrings, ", "),
-		DefaultFieldID,
-		DefaultFieldContent, DefaultFieldContent,
-		DefaultFieldMetadata, DefaultFieldMetadata,
-		DefaultFieldVector, DefaultFieldVector,
 	)
 
 	// Execute insert
@@ -763,13 +764,14 @@ type SearchResult struct {
 	Distance float64                `json:"distance"`
 }
 
+// SearchByDocID performs a search by document ID
 func (i *Indexer) SearchByDocID(ctx context.Context, docID string, opts *SearchOptions) ([]*SearchResult, error) {
 	// Get the vector for the document ID
 	query := fmt.Sprintf(
 		"SELECT %s FROM %s WHERE %s = $1",
-		DefaultFieldVector,
+		DefaultFieldVector, // vector/embedding field
 		i.config.TableName,
-		DefaultFieldID,
+		DefaultFieldID, // document_id field
 	)
 
 	var vector pgvector.Vector
@@ -782,7 +784,7 @@ func (i *Indexer) SearchByDocID(ctx context.Context, docID string, opts *SearchO
 	}
 
 	// Add filter to exclude the query document itself
-	filter := fmt.Sprintf("%s != $1::text", DefaultFieldID) // 明确指定类型为text
+	filter := fmt.Sprintf("%s != $1::text", DefaultFieldID) // document_id field
 	filterParams := []interface{}{docID}
 
 	// Merge with existing filter if any
