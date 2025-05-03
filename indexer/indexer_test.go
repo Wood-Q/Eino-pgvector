@@ -1,4 +1,4 @@
-package pgvector
+package indexer
 
 import (
 	"context"

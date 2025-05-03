@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package pgvector
+package indexer
 
 import (
 	"context"
@@ -35,45 +35,7 @@ import (
 	"github.com/cloudwego/eino/schema"
 )
 
-const (
-	defaultBatchSize = 10
-)
 
-// VectorType represents the vector types supported by PGVector
-type VectorType string
-
-// VectorTypeVector standard vector type, supports up to 16000 dimensions
-const VectorTypeVector VectorType = "vector"
-
-// VectorTypeHalfvec half-precision vector type, supports up to 16000 dimensions
-const VectorTypeHalfvec VectorType = "halfvec"
-
-// VectorTypeBit bit vector type, supports up to 64000 dimensions
-const VectorTypeBit VectorType = "bit"
-
-// VectorTypeSparsevec sparse vector type, supports up to 16000 non-zero elements
-const VectorTypeSparsevec VectorType = "sparsevec"
-
-// IndexType represents the index types supported by PGVector
-type IndexType string
-
-const (
-	// IndexTypeHNSW represents HNSW index type
-	IndexTypeHNSW IndexType = "hnsw"
-	// IndexTypeIVFFlat represents IVFFlat index type
-	IndexTypeIVFFlat IndexType = "ivfflat"
-)
-
-// DistanceType 表示向量距离类型
-// 支持 L2、内积、余弦等
-// 可根据实际需求扩展
-type DistanceType string
-
-const (
-	DistanceTypeL2           DistanceType = "l2"
-	DistanceTypeInnerProduct DistanceType = "inner_product"
-	DistanceTypeCosine       DistanceType = "cosine"
-)
 
 // IndexerConfig configures the PGVector indexer
 type IndexerConfig struct {
@@ -127,12 +89,14 @@ func getSuitableVectorType(dimension int) VectorType {
 
 // NewIndexer creates a new PGVector indexer
 func NewIndexer(ctx context.Context, config *IndexerConfig) (*Indexer, error) {
+	// Validate config
 	if config.Embedding == nil {
 		return nil, fmt.Errorf("[PGVectorIndexer] embedding is required")
 	}
 
+	// Validate batchsize
 	if config.BatchSize == 0 {
-		config.BatchSize = defaultBatchSize
+		config.BatchSize = DefaultBatchSize
 	}
 
 	// Set default vector type
