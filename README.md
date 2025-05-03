@@ -1,126 +1,177 @@
+[English](README.en.md) | [中文](README.md)
+
 # Eino-pgvector
 
-Eino-pgvector 是一个基于 PostgreSQL 和 pgvector 扩展的向量数据库集成包，为 Go 应用程序提供高效的向量存储和相似度搜索功能。它是 CloudWeGo Eino 项目的一部分，专门用于处理向量数据的存储和检索需求。
+Eino-pgvector 是基于 CloudWeGo Eino 框架的 PostgreSQL 向量数据库扩展，集成了 pgvector 插件，支持高效的向量检索、存储与管理，适用于 AI、推荐系统、语义搜索等场景。
+
+本项目由我个人开发，求求 star 啦！🥰
+
+（官方集成功能 PR 提出中...）
 
 ## 特性
 
-- 简单易用的 API 接口
-- 支持向量数据的存储和检索
-- 集成 HNSW 索引，提供高效的近似最近邻搜索
-- 支持元数据过滤
-- 支持基于文档 ID 的相似度搜索
-- 完全兼容 CloudWeGo Eino 生态系统
+- 支持多种向量索引类型（如 HNSW）
+- 灵活的元数据存储与过滤
+- 集成主流 Embedding 服务（如腾讯云）
+- 支持 Retriever 语义检索
+- 易于扩展与集成
 
-## 前置要求
+## 安装与依赖
 
-- Go 1.24 或更高版本
-- PostgreSQL 数据库
-- pgvector 扩展
+### 环境要求
 
-## 安装
+- Go 1.18 及以上
+- PostgreSQL 13+，需安装 [pgvector](https://github.com/pgvector/pgvector) 插件
+
+### 依赖安装
 
 ```bash
-go get github.com/Wood-Q/Eino-pgvector
+git clone https://github.com/Wood-Q/Eino-pgvector.git
+cd Eino-pgvector
+go mod tidy
 ```
+
+### 数据库准备
+
+1. 如果已经有 postgreSQL，安装 pgvector 插件：
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+   ```
+2. 如果还没有，可以使用 `docker-compose.yaml` 一键部署：
+   ```bash
+   docker-compose up -d
+   ```
 
 ## 快速开始
 
-### example/main.go是使用的示例文件
-### PostgreSQL的索引仅支持2000维度大小，所以推荐使用腾讯的混元模型生成，火山引擎的维度会超，希望注意一下
-
-### 1. 配置数据库
-
-可以根据仓库里提供的docker-compose和init.sql实现初始化，配置带有pgvector插件的数据库
-
-### 2. 初始化 Indexer
+参考 `examples/main.go`，以下为主要用法：
 
 ```go
-indexer, err := pgvector.NewIndexer(ctx, &pgvector.IndexerConfig{
-    Host:      "localhost",
-    Port:      5432,
-    User:      "postgres",
-    Password:  "your-password",
-    DBName:    "your-database",
-    SSLMode:   "disable",
-    TableName: "documents",
-    Dimension: 1024,//按你使用的向量转化模型实现
-    IndexType: "hnsw",
-    IndexOptions: map[string]interface{}{
-        "m":               16,
-        "ef_construction": 64,
-    },
-    Embedding: embedder, // 您需要提供一个实现了 Embedder 接口的嵌入模型
-})
-```
+import (
+    "context"
+    "github.com/Wood-Q/Eino-pgvector/indexer"
+    "github.com/Wood-Q/Eino-pgvector/retriever"
+    "github.com/cloudwego/eino-ext/components/embedding/tencentcloud"
+    "github.com/cloudwego/eino/schema"
+    "github.com/google/uuid"
+)
 
-### 3. 存储文档
-
-```go
-docs := []*schema.Document{
-    {
-        ID:      uuid.New().String(),
-        Content: "示例文档内容",
-        MetaData: map[string]interface{}{
-            "source":   "example_source",
-            "category": "example_category",
-        },
-    },
+func main() {
+    ctx := context.Background()
+    // 创建 embedder
+    // 示例使用腾讯云
+    // 相关配置参考Eino官方文档
+    cfg := &tencentcloud.EmbeddingConfig{SecretID: "<YourSecretID>", SecretKey: "<YourSecretKey>"}
+    embedder, _ := tencentcloud.NewEmbedder(ctx, cfg)
+    // 创建 indexer
+    myindexer, _ := indexer.NewIndexer(ctx, &indexer.IndexerConfig{
+        Host: "localhost", Port: 5432, User: "postgres", Password: "postgres", DBName: "vectorDB",
+        SSLMode: "disable", TableName: "documents", Dimension: 1024, IndexType: "hnsw",
+        IndexOptions: map[string]interface{}{ "m": 16, "ef_construction": 64 }, Embedding: embedder,
+    })
+    defer myindexer.Close()
+    // 存储文档
+    docs := []*schema.Document{{ID: uuid.New().String(), Content: "123", MetaData: map[string]interface{}{ "source": "database_intro" }}}
+    ids, _ := myindexer.Store(ctx, docs)
+    // 通过向量搜索
+    queryVectors, _ := embedder.EmbedStrings(ctx, []string{"91011"})
+    results, _ := myindexer.Search(ctx, queryVectors[0], &indexer.SearchOptions{Limit: 5})
+    // 创建 retriever
+    myretriever, _ := retriever.NewRetriever(ctx, &retriever.RetrieverConfig{...})
+    // 通过语义搜索
+    resultsment, _ := myretriever.Retrieve(ctx, "91011", &retriever.SearchOptions{Limit: 5})
 }
-
-ids, err := indexer.Store(ctx, docs)
 ```
 
-### 4. 搜索文档
+## 主要目录结构
 
-#### 基本搜索
+```
+Eino-pgvector/
+├── indexer/      # 向量索引与存储实现
+├── retriever/    # 检索器实现
+├── examples/     # 使用示例
+├── init.sql      # 数据库初始化脚本
+├── docker-compose.yaml # 一键部署脚本
+```
+
+## 相关函数参数配置
 
 ```go
-results, err := indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
-    Limit: 5, // 返回前5个结果
-})
+    // RetrieverConfig 配置检索器的参数
+    // IndexerConfig 配置索引器的参数
+    // 两个的参数是一样的
+    type RetrieverConfig struct {
+        // PostgreSQL 连接信息
+        Host     string `json:"host"`
+        Port     int    `json:"port"`
+        User     string `json:"user"`
+        Password string `json:"password"`
+        DBName   string `json:"db_name"`
+        SSLMode  string `json:"ssl_mode"`
+
+        // 表名
+        TableName string `json:"table_name"`
+
+        // 向量维度
+        Dimension int `json:"dimension"`
+
+        // 向量化配置
+        Embedding embedding.Embedder `json:"embedding"`
+    }
+
+    // SearchResult 表示检索结果
+    type SearchResult struct {
+        ID       string                 `json:"id"`
+        Content  string                 `json:"content"`
+        Metadata map[string]interface{} `json:"metadata"`
+        Distance float64                `json:"distance"`
+    }
+
+    // HNSWSearchOptions 配置 HNSW 索引的搜索参数
+    type HNSWSearchOptions struct {
+        // 搜索时动态候选列表的大小（默认值：40）
+        EFSearch int
+        // 是否使用迭代扫描
+        IterativeScan string // "strict_order" 或 "relaxed_order"
+        // 允许访问的最大元组数（默认值：20000）
+        MaxScanTuples int
+        // 扫描时的内存倍数（默认值：1）
+        ScanMemMultiplier int
+    }
+
+    // IVFFlatSearchOptions 配置 IVFFlat 特定搜索参数
+    type IVFFlatSearchOptions struct {
+        // 探针数量（默认值：1）
+        Probes int
+        // 是否使用迭代扫描
+        IterativeScan string // "strict_order" 或 "relaxed_order"
+        // 最大探针数
+        MaxProbes int
+    }
+
+    // SearchOptions 配置检索选项
+    type SearchOptions struct {
+        // 搜索时使用的距离类型
+        DistanceType DistanceType
+        // 返回结果的最大数量
+        Limit int
+        // 最大距离阈值（可选）
+        MaxDistance *float64
+        // 额外的过滤条件，SQL WHERE 子句格式（不含 WHERE 关键字）
+        Filter string
+        // 预处理语句的过滤参数
+        FilterParams []interface{}
+        // HNSW 特定选项
+        HNSWOptions *HNSWSearchOptions
+        // IVFFlat 特定选项
+        IVFFlatOptions *IVFFlatSearchOptions
+    }
 ```
-
-#### 带过滤条件的搜索
-
-```go
-results, err := indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
-    Limit:        5,
-    Filter:       "metadata->>'category' = $1",
-    FilterParams: []interface{}{"example_category"},
-})
-```
-
-#### 基于文档 ID 的相似度搜索
-
-```go
-results, err := indexer.SearchByDocID(ctx, referenceID, &pgvector.SearchOptions{
-    Limit: 5,
-})
-```
-
-#### 使用 HNSW 索引选项
-
-```go
-results, err := indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
-    Limit: 5,
-    HNSWOptions: &pgvector.HNSWSearchOptions{
-        EFSearch: 40,
-    },
-})
-```
-
-## 高级配置
-
-### HNSW 索引参数
-
-- `m`: 每个节点的最大连接数（默认：16）
-- `ef_construction`: 构建索引时的搜索宽度（默认：64）
-- `ef_search`: 搜索时的搜索宽度，较大的值会提高搜索精度但会降低速度
 
 ## 许可证
 
-本项目采用 Apache-2.0 许可证。详见 LICENSE 文件。
+本项目基于 MITLicense 发布。
 
-## 贡献
+## 欢迎贡献
 
-欢迎提交 Issue 和 Pull Request！
+欢迎通过 PR 或 Issue 来贡献代码或提出问题。

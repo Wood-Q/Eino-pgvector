@@ -21,7 +21,8 @@ import (
 	"fmt"
 	"log"
 
-	pgvector "github.com/Wood-Q/Eino-pgvector"
+	"github.com/Wood-Q/Eino-pgvector/indexer"
+	"github.com/Wood-Q/Eino-pgvector/retriever"
 	"github.com/cloudwego/eino-ext/components/embedding/tencentcloud"
 	"github.com/cloudwego/eino/schema"
 	"github.com/google/uuid"
@@ -34,8 +35,7 @@ func main() {
 	// 创建 embedder 配置
 	cfg := &tencentcloud.EmbeddingConfig{
 		SecretID:  "your-api-ID",
-		SecretKey: "your-api-Key",
-		Region:    "ap-guangzhou",
+		SecretKey: "your-api-key",
 	}
 
 	// 创建 embedder
@@ -45,7 +45,7 @@ func main() {
 	}
 
 	// 创建 pgvector indexer
-	indexer, err := pgvector.NewIndexer(ctx, &pgvector.IndexerConfig{
+	myindexer, err := indexer.NewIndexer(ctx, &indexer.IndexerConfig{
 		Host:      "localhost",
 		Port:      5433,
 		User:      "postgres",
@@ -64,7 +64,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("创建indexer失败: %v", err)
 	}
-	defer indexer.Close()
+	defer myindexer.Close()
 
 	// 创建文档
 	docs := []*schema.Document{
@@ -98,7 +98,7 @@ func main() {
 	}
 
 	// 存储文档
-	ids, err := indexer.Store(ctx, docs)
+	ids, err := myindexer.Store(ctx, docs)
 	if err != nil {
 		log.Fatalf("存储文档失败: %v", err)
 	}
@@ -108,7 +108,7 @@ func main() {
 	// 示例1: 基本向量搜索
 	fmt.Println("=== 示例1: 基本向量搜索 ===")
 	// 假设我们已经有了查询向量
-	queryText := "PostgreSQL数据库的向量搜索功能"
+	queryText := "91011"
 	queryVectors, err := embedder.EmbedStrings(ctx, []string{queryText})
 	if err != nil {
 		log.Fatalf("生成查询向量失败: %v", err)
@@ -116,7 +116,7 @@ func main() {
 	queryVector := queryVectors[0]
 
 	// 执行向量搜索
-	results, err := indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
+	results, err := myindexer.Search(ctx, queryVector, &indexer.SearchOptions{
 		Limit: 5, // 返回前5个结果
 	})
 	if err != nil {
@@ -133,7 +133,7 @@ func main() {
 
 	// 示例2: 带过滤条件的搜索
 	fmt.Println("=== 示例2: 带过滤条件的搜索 ===")
-	results, err = indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
+	results, err = myindexer.Search(ctx, queryVector, &indexer.SearchOptions{
 		Limit:        5,
 		Filter:       "metadata->>'category' = $1", // 只搜索特定类别
 		FilterParams: []interface{}{"database"},
@@ -153,7 +153,8 @@ func main() {
 	fmt.Println("=== 示例3: 基于文档ID的搜索 ===")
 	// 使用第一个文档作为查询基准
 	referenceID := ids[0]
-	results, err = indexer.SearchByDocID(ctx, referenceID, &pgvector.SearchOptions{
+
+	results, err = myindexer.SearchByDocID(ctx, referenceID, &indexer.SearchOptions{
 		Limit: 5,
 	})
 	if err != nil {
@@ -169,9 +170,9 @@ func main() {
 
 	// 示例4: 使用 HNSW 索引选项
 	fmt.Println("=== 示例4: 使用 HNSW 索引选项 ===")
-	results, err = indexer.Search(ctx, queryVector, &pgvector.SearchOptions{
+	results, err = myindexer.Search(ctx, queryVector, &indexer.SearchOptions{
 		Limit: 5,
-		HNSWOptions: &pgvector.HNSWSearchOptions{
+		HNSWOptions: &indexer.HNSWSearchOptions{
 			EFSearch: 40,
 		},
 	})
@@ -182,6 +183,37 @@ func main() {
 	fmt.Printf("查询: %s (使用 HNSW 选项)\n", queryText)
 	fmt.Println("搜索结果:")
 	for i, result := range results {
+		fmt.Printf("  %d. ID: %s\n     内容: %s\n     距离: %.4f\n     元数据: %v\n\n",
+			i+1, result.ID, result.Content, result.Distance, result.Metadata)
+	}
+
+	// 示例5: 使用Retriever进行最相似向量匹配
+	fmt.Println("=== 示例5: 使用Retriever进行最相似向量匹配 ===")
+	// 创建Retriever
+	myretriever, err := retriever.NewRetriever(ctx, &retriever.RetrieverConfig{
+		Host:      "localhost",
+		Port:      5433,
+		User:      "postgres",
+		Password:  "123456",
+		DBName:    "vectorDB",
+		SSLMode:   "disable",
+		TableName: "documents",
+		Dimension: 1024,
+		Embedding: embedder,
+	})
+	if err != nil {
+		log.Fatalf("创建Retriever失败: %v", err)
+	}
+	// 使用Retriever进行搜索
+	resultsment, err := myretriever.Retrieve(ctx, queryText, &retriever.SearchOptions{
+		Limit: 5,
+	})
+	if err != nil {
+		log.Fatalf("使用Retriever进行搜索失败: %v", err)
+	}
+	fmt.Printf("查询: %s (使用Retriever)\n", queryText)
+	fmt.Println("搜索结果:")
+	for i, result := range resultsment {
 		fmt.Printf("  %d. ID: %s\n     内容: %s\n     距离: %.4f\n     元数据: %v\n\n",
 			i+1, result.ID, result.Content, result.Distance, result.Metadata)
 	}
